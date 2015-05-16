@@ -1,0 +1,17 @@
+{
+    "name": "stored/client",
+    "description": "Stored PHP client",
+    "authors": [
+        {
+            "name": "Cesar Rodas",
+            "email": "crodas@php.net"
+        }
+    ],
+    "autoload": {
+        "psr-0": {
+            "Stored": "src/"
+        }
+    },
+    "minimum-stability": "dev",
+    "require": {}
+}
