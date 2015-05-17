@@ -2,6 +2,15 @@
 
 namespace Stored;
 
+if (!function_exists('curl_file_create')) {
+    function curl_file_create($filename, $mimetype = '', $postname = '') {
+        return "@$filename;filename="
+            . ($postname ?: basename($filename))
+            . ($mimetype ? ";type=$mimetype" : '');
+    }
+}
+
+
 class Client
 {
     protected static $config;
@@ -106,6 +115,23 @@ class Client
             $internal_id,
             "{$config['server']}/{$config['user']}/{$upload_id}"
         );
+    }
+
+    public static function upload_file($file)
+    {
+        $upload = self::image('file', filesize($file)+1);
+        $url  =  $upload[1] . '.json';
+        $post = array('file' => curl_file_create($file), 'd' => uniqid(true)); 
+        $ch   = curl_init($url);
+        curl_setopt_array($ch, array(
+            CURLOPT_POST            => 1,
+            CURLOPT_POSTFIELDS      => $post,
+            CURLOPT_RETURNTRANSFER  => 1
+        ));
+        $data = @json_decode(curl_exec($ch));
+        curl_close($ch);
+
+        return $data;
     }
 }
 
