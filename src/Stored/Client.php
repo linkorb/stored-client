@@ -41,7 +41,7 @@ class Client
      */
     protected static function doSign($str)
     {
-        $to_sign = self::$config['private_key'] . "\0" . $str;
+        $to_sign = self::$config['secret'] . "\0" . $str;
         $method  = self::getSignMethod();
 
         return hash($method, $to_sign, true);
@@ -81,7 +81,7 @@ class Client
      *
      *  The format is quite simple:
      *
-     *      base64_encode([1 byte: Signature Length] [N-bytes: Signature] [JSON Object])
+     *      base64_encode([1 byte: Signature Length] [N-bytes: Signature] [12 bytes: upload_id] [JSON Object])
      *  
      *
      *  @param string   $name   Upload label
@@ -94,9 +94,8 @@ class Client
         $internal_id  = self::getUniqId();
         $settings = hex2bin($internal_id) . json_encode(array(
             'type' => 'image',
-            'name' => 'name',
+            'name' => $name,
             'cb' => self::$config['callback'],
-            'method'  => self::getSignMethod(),
             'limit' => $limit,
         ));
         $signature = self::doSign($settings);
@@ -105,7 +104,7 @@ class Client
 
         return array(
             $internal_id,
-            "{$config['server']}/store/{$config['public_key']}/{$upload_id}"
+            "{$config['server']}/{$config['user']}/{$upload_id}"
         );
     }
 }
