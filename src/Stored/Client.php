@@ -82,9 +82,9 @@ class Client
     }
 
     /**
-     *  Queue an image upload. 
+     *  Prepare URL to upload file
      *
-     *  It returns an URL where the image upload is expected. The URL has
+     *  It returns an URL where the file upload is expected. The URL has
      *  a signature to make sure it's legic, it also has a JSON object
      *  with the settings of what file type and constrains are expected.
      *
@@ -93,34 +93,81 @@ class Client
      *      base64_encode([1 byte: Signature Length] [N-bytes: Signature] [12 bytes: upload_id] [JSON Object])
      *  
      *
-     *  @param string   $name   Upload label
-     *  @param int      $limit  Size in megabytes
+     *  @param array    $config     Array with upload specifications
      *
      *  @return string Upload ID
      */ 
-    public static function image($name = '', $limit = 1024)
+    protected static function prepare_upload(Array $config)
     {
         $internal_id  = self::getUniqId();
-        $settings = hex2bin($internal_id) . json_encode(array(
-            'type' => 'image',
-            'name' => $name,
-            'cb' => self::$config['callback'],
-            'limit' => $limit,
-        ));
+        $settings = hex2bin($internal_id) . json_encode($config);
         $signature = self::doSign($settings);
         $upload_id = self::base64_encode(chr(strlen($signature)) . $signature . $settings);
         $config    = self::$config;
 
         return array(
-            $internal_id,
-            "{$config['server']}/{$config['user']}/{$upload_id}"
+            'file_id' => $internal_id,
+            'url' => "{$config['server']}/{$config['user']}/{$upload_id}"
         );
     }
 
-    public static function upload_file($file)
+    protected static function get_url() 
     {
-        $upload = self::image('file', filesize($file)+1);
-        $url  =  $upload[1] . '.json';
+        $https =!empty($_SERVER['HTTPS']) ? "https" : "http";
+        return $https . '://' . $_SERVER["HTTP_HOST"] . $_SERVER["REQUEST_URI"];
+    }
+
+    /**
+     *  Generates an URL for client upload
+     *
+     *  A client upload is when give pass this URL to our 
+     *  visitor and they push their files directly to the 
+     *  stored server.
+     *
+     *  @return array($file_id, $url_to_upload)
+     */
+    public static function client_upload(Array $args = array())
+    {
+        $args['cb'] = self::get_url();
+        return self::prepare_upload($args);
+    }
+    
+    protected static function check_request()
+    {
+        $data = $_REQUEST['std'];
+        ksort($data);
+        unset($data['sg']);
+        $data = http_build_query($data);
+        return hash('sha256', self::$config['secret'] . hash('sha256', $data)) === $_REQUEST['std']['sg'];
+    }
+
+    public static function get_upload_details()
+    {
+        if (!self::Check_request()) {
+            throw new \RuntimeException("The request is not legit");
+        }
+        return $_REQUEST['std'];
+    }
+
+    public static function did_upload()
+    {
+        return !empty($_REQUEST['std']) && is_array($_REQUEST['std']) && self::check_request();
+    }
+
+    public static function store_upload($name, Array $args = array())
+    {
+        if (empty($_FILES) || empty($_FILES[$name])) {
+            throw new \RuntimeException("There is no upload named $name");
+        }
+        return self::store_file($_FILES[$name]['tmp_name'], $args);
+    }
+
+    public static function store_file($file, Array $args = array())
+    {
+        $args['name'] = 'file';
+        $args['limit'] = filesize($file)+1;
+        $upload = self::prepare_upload($args);
+        $url  =  $upload['url'] . '.json';
         $post = array('file' => curl_file_create($file), 'd' => uniqid(true)); 
         $ch   = curl_init($url);
         curl_setopt_array($ch, array(
