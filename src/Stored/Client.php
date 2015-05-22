@@ -13,7 +13,7 @@ if (!function_exists('curl_file_create')) {
 class Client
 {
     protected $config;
-    protected $uploads = array();
+    protected $rules = array();
 
     public function __construct(Array $config)
     {
@@ -223,5 +223,45 @@ class Client
         return $data;
     }
     // }}}
+
+    public function createRule($name, Array $specs)
+    {
+        $this->rules[$name] = $specs;
+
+        return $this;
+    }
+
+    protected function api($path, $post = "")
+    {
+        $ch = curl_init($this->config['server'] . $path);
+        if ($post) {
+            if (is_array($post)) {
+                $post = http_build_query($post);
+            }
+            curl_setopt_array($ch, array(
+                CURLOPT_POST            => 1,
+                CURLOPT_POSTFIELDS      => $post,
+            ));
+        }
+
+        curl_setopt_array($ch, array(
+            CURLOPT_RETURNTRANSFER => 1,
+            CURLOPT_HTTPHEADER => array(
+                'X-User: ' . $this->config['user'],
+                'X-Auth: ' . bin2hex($this->doSign($path . "\0" . $post)),
+            ),
+        ));
+
+        $body = @json_decode(curl_exec($ch));
+        curl_close($ch);
+
+        return $body;
+    }
+
+    public function commit()
+    {
+        $body = json_encode(array('rules' => $this->rules, 'id' => (int)microtime(true)*1000));
+        return $this->api('/api/rules', $body);
+    }
 
 }
