@@ -171,6 +171,19 @@ class Client
     }
     // }}}
     
+    // storeUpload($name, $args) {{{
+    /**
+     *  Upload a user uploads to stored
+     *
+     *  Is not the most optimize thing to-do, as there are many steps:
+     *      1. User uplaod to client
+     *      2. Client pushes file towards stored
+     *
+     *  Ideally an user should upload directly to stored
+     *
+     *  @param string $name     key name in $_FILES
+     *  @param array  $args     Upload settings
+     */
     public function storeUpload($name, Array $args = array())
     {
         if (empty($_FILES) || empty($_FILES[$name])) {
@@ -178,9 +191,22 @@ class Client
         }
         return $this->storeFile($_FILES[$name]['tmp_name'], $args);
     }
+    // }}}
 
+    // storeFile($file, Array $args) {{{
+    /**
+     *  Store file
+     *
+     *  Store a file from the file-system to stored-server.
+     *
+     *  @param  string $file    File path
+     *  @param  array  $args    Upload settings
+     */
     public function storeFile($file, Array $args = array())
     {
+        if (!is_readable($file)) {
+            throw new \RuntimeException("{$file} does not exists or cannot be read");
+        }
         $args['name']  = 'file';
         $args['limit'] = filesize($file)+1;
         $url  =  $this->getUploadUrl($args) . '.json';
@@ -196,5 +222,6 @@ class Client
 
         return $data;
     }
+    // }}}
 
 }
