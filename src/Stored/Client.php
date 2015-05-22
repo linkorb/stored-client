@@ -10,65 +10,60 @@ if (!function_exists('curl_file_create')) {
     }
 }
 
-
 class Client
 {
-    protected static $config;
-    protected static $uploads = array();
+    protected $config;
+    protected $uploads = array();
 
-    public static function configure(Array $config)
+    public function __construct(Array $config)
     {
-        self::$config = $config;
-    }
-
-    /**
-     *  Generate random strings, with time as their prefix.
-     *
-     *  Store random values is not index-friendly (as it a random hash),
-     *  but by prefixing time we add order (so we it can be index friendly)
-     *
-     *  @return <string>
-     */
-    protected static function getUniqId()
-    {
-        $prefix = dechex(time());
-
-        if (is_callable('openssl_random_pseudo_bytes')) {
-            return $prefix . bin2hex(openssl_random_pseudo_bytes(8));
+        $args = array('server', 'user', 'secret');
+        foreach ($args as $key) {
+            if (empty($config[$key])) {
+                throw new \RuntimeException("Missing configuration {$key}");
+            }
         }
-
-        return substr($prefix . substr(strrev(uniqid(true)), 0, 10) . strrev(uniqid(true)), 0, 24);
+        $this->config = $config;
     }
 
+    // uploadSuccess() {{{
     /**
-     *  Simple signature
-     *
-     *  Signs the string (usually a JSON object) with a key, so the server can know
-     *  that our request is legit.
-     *
-     *  @return string
+     *  Did the upload to stored succeed?
      */
-    protected static function doSign($str)
+    public function uploadSuccess()
     {
-        $to_sign = self::$config['secret'] . "\0" . $str;
-        $method  = self::getSignMethod();
-
-        return hash($method, $to_sign, true);
+        return !empty($_REQUEST['std']) && is_array($_REQUEST['std']) && $this->checkRequestSignature();
     }
+    // }}}
 
+    // getCurrentUrl() {{{
     /**
-     *  Return the best signing algorithm to calculate the signature hash
-     *
-     *  @return string
+     *  Get current URL
      */
-    protected static function getSignMethod()
+    protected function getCurrentUrl()
     {
-        if (is_callable('hash_algos') && in_array('sha256', hash_algos())) {
-            return 'sha256';
-        }
-        return 'sha1';
+        $https =!empty($_SERVER['HTTPS']) ? "https" : "http";
+        return $https . '://' . $_SERVER["HTTP_HOST"] . $_SERVER["REQUEST_URI"];
     }
+    // }}}
 
+    // checkRequestSignature() {{{
+    /**
+     *  Check if the request is legit or not
+     *
+     *  @return bool
+     */
+    protected function checkRequestSignature()
+    {
+        $data = $_REQUEST['std'];
+        ksort($data);
+        unset($data['sg']);
+        $data = http_build_query($data);
+        return hash('sha256', $this->config['secret'] . hash('sha256', $data)) === $_REQUEST['std']['sg'];
+    }
+    // }}}
+
+    // base64_encode($str) {{{
     /**
      *  Make base64 encode URL friendly
      *
@@ -80,43 +75,68 @@ class Client
     {
          return strtr(base64_encode($str), '+/=', '-_~');
     }
+    // }}}
 
+    // doSign($str) {{{
     /**
-     *  Prepare URL to upload file
+     *  Simple signature
      *
-     *  It returns an URL where the file upload is expected. The URL has
-     *  a signature to make sure it's legic, it also has a JSON object
-     *  with the settings of what file type and constrains are expected.
+     *  Signs the string (usually a JSON object) with a key, so the server can know
+     *  that our request is legit.
      *
-     *  The format is quite simple:
-     *
-     *      base64_encode([1 byte: Signature Length] [N-bytes: Signature] [12 bytes: upload_id] [JSON Object])
-     *  
-     *
-     *  @param array    $config     Array with upload specifications
-     *
-     *  @return string Upload ID
-     */ 
-    protected static function prepare_upload(Array $config)
+     *  @return string
+     */
+    protected function doSign($str)
     {
-        $internal_id  = self::getUniqId();
-        $settings = hex2bin($internal_id) . json_encode($config);
-        $signature = self::doSign($settings);
-        $upload_id = self::base64_encode(chr(strlen($signature)) . $signature . $settings);
-        $config    = self::$config;
+        $to_sign = $this->config['secret'] . "\0" . $str;
+
+        return hash('sha256', $to_sign, true);
+    }
+    // }}}
+
+    // getUniqId() {{{
+    /**
+     *  Generate random strings, with time as their prefix.
+     *
+     *  Store random values is not index-friendly (as it a random hash),
+     *  but by prefixing time we add order (so we it can be index friendly)
+     *
+     *  @return <string>
+     */
+    protected function getUniqId()
+    {
+        $prefix = dechex(time());
+
+        if (is_callable('openssl_random_pseudo_bytes')) {
+            return $prefix . bin2hex(openssl_random_pseudo_bytes(8));
+        }
+
+        return substr($prefix . substr(strrev(uniqid(true)), 0, 10) . strrev(uniqid(true)), 0, 24);
+    }
+    // }}}
+
+    // prepareUpload(Array $args) {{{
+    /**
+     *  Prepare upload to stored
+     *
+     *  @return array('file_id' => $internal_id, 'url' => $url)
+     */
+    public function prepareUpload(Array $args)
+    {
+        $internal_id  = $this->getUniqId();
+        $settings = hex2bin($internal_id) . json_encode($args);
+        $signature = $this->doSign($settings);
+        $upload_id = $this->base64_encode(chr(strlen($signature)) . $signature . $settings);
+        $config    = $this->config;
 
         return array(
             'file_id' => $internal_id,
             'url' => "{$config['server']}/{$config['user']}/{$upload_id}"
         );
     }
+    // }}}
 
-    protected static function get_url() 
-    {
-        $https =!empty($_SERVER['HTTPS']) ? "https" : "http";
-        return $https . '://' . $_SERVER["HTTP_HOST"] . $_SERVER["REQUEST_URI"];
-    }
-
+    // getUploadUrl(Array $args()) {{{
     /**
      *  Generates an URL for client upload
      *
@@ -126,48 +146,44 @@ class Client
      *
      *  @return array($file_id, $url_to_upload)
      */
-    public static function client_upload(Array $args = array())
+    public function getUploadUrl(Array $args = array())
     {
-        $args['cb'] = self::get_url();
-        return self::prepare_upload($args);
+        $args['cb'] = $this->getCurrentUrl();
+        $upload     =  $this->prepareUpload($args);
+        
+        return $upload['url'];
     }
-    
-    protected static function check_request()
-    {
-        $data = $_REQUEST['std'];
-        ksort($data);
-        unset($data['sg']);
-        $data = http_build_query($data);
-        return hash('sha256', self::$config['secret'] . hash('sha256', $data)) === $_REQUEST['std']['sg'];
-    }
+    // }}}
 
-    public static function get_upload_details()
+    // getUploadDetails() {{{
+    /**
+     *  Get the upload details, confirmed first if
+     *  the data is legit
+     *
+     *  @return array
+     */
+    public function getUploadDetails()
     {
-        if (!self::Check_request()) {
+        if (!$this->checkRequestSignature()) {
             throw new \RuntimeException("The request is not legit");
         }
         return $_REQUEST['std'];
     }
-
-    public static function did_upload()
-    {
-        return !empty($_REQUEST['std']) && is_array($_REQUEST['std']) && self::check_request();
-    }
-
-    public static function store_upload($name, Array $args = array())
+    // }}}
+    
+    public function storeUpload($name, Array $args = array())
     {
         if (empty($_FILES) || empty($_FILES[$name])) {
             throw new \RuntimeException("There is no upload named $name");
         }
-        return self::store_file($_FILES[$name]['tmp_name'], $args);
+        return $this->storeFile($_FILES[$name]['tmp_name'], $args);
     }
 
-    public static function store_file($file, Array $args = array())
+    public function storeFile($file, Array $args = array())
     {
-        $args['name'] = 'file';
+        $args['name']  = 'file';
         $args['limit'] = filesize($file)+1;
-        $upload = self::prepare_upload($args);
-        $url  =  $upload['url'] . '.json';
+        $url  =  $this->getUploadUrl($args) . '.json';
         $post = array('file' => curl_file_create($file), 'd' => uniqid(true)); 
         $ch   = curl_init($url);
         curl_setopt_array($ch, array(
@@ -180,5 +196,5 @@ class Client
 
         return $data;
     }
-}
 
+}

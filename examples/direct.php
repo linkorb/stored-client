@@ -4,18 +4,20 @@ require __DIR__ . "/common.php";
 
 use Stored\Client;
 
-if (Client::did_upload()) {
-    var_dump(Client::get_upload_details());exit;
+if ($client->uploadSuccess()) {
+    $details = $client->getUploadDetails();
+    var_dump($details);
+    echo '<img src="//localhost:9999/' . $details['id'] . '/image/square/150/grey"/>';
 }
 
-$upload = Client::client_upload(array('type' => 'image', 'name' => 'foobar'));
+$upload_url = $client->getUploadUrl(array('type' => 'image', 'name' => 'foobar'));
 ?>
 <html>
 <head>
     <title>Upload (through our servers)</title>
 </head>
 <body>
-    <form id="fileupload" action="<?php echo $upload['url']?>" method="POST" enctype="multipart/form-data">
+    <form id="fileupload" action="<?php echo $upload_url?>" method="POST" enctype="multipart/form-data">
         <input type="file" name="foobar" multiple>
         <button type="submit" class="btn btn-primary start">
             <i class="glyphicon glyphicon-upload"></i>

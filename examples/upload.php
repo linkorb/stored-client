@@ -2,11 +2,8 @@
 
 require __DIR__ . "/common.php";
 
-use Stored\Client;
-
-
 if (!empty($_FILES['foobar'])) {
-    var_dump(Client::store_upload('foobar', array('type' => 'image')));
+    var_dump($client->storeUpload('foobar', array('type' => 'image')));
 }
 
 ?>
