@@ -7,10 +7,10 @@ use Stored\Client;
 if ($client->uploadSuccess()) {
     $details = $client->getUploadDetails();
     var_dump($details);
-    echo '<img src="//188.166.70.124/' . $details['id'] . '/image/square/150/grey"/>';
+    echo '<img src="//188.166.70.124/' . $details['slug'] . '/image/square/150/grey"/>';
 }
 
-$upload_url = $client->getUploadUrl(array('type' => 'image', 'name' => 'foobar'));
+$upload_url = $client->getUploadUrl(array('type' => 'image', 'name' => 'foobar', 'slug' => 'foo/bar/xxx'));
 ?>
 <html>
 <head>

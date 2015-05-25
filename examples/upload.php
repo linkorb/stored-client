@@ -3,7 +3,7 @@
 require __DIR__ . "/common.php";
 
 if (!empty($_FILES['foobar'])) {
-    var_dump($client->storeUpload('foobar', array('type' => 'image')));
+    var_dump($client->storeUpload('foobar', array('type' => 'image', 'slug' => 'foobar/xxx')));
 }
 
 ?>
